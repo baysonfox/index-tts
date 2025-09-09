@@ -409,7 +409,7 @@ class UnifiedVoice(nn.Module):
         for module in embeddings:
             module.weight.data.normal_(mean=0.0, std=.02)
 
-    def post_init_gpt2_config(self, use_deepspeed=False, kv_cache=False, half=False):
+    def post_init_gpt2_config(self, use_deepspeed=False, kv_cache=False, half=False, dtype=None):
         seq_length = self.max_mel_tokens + self.max_text_tokens + 2
         gpt_config = GPT2Config(
             vocab_size=self.number_mel_codes,
@@ -432,17 +432,21 @@ class UnifiedVoice(nn.Module):
         )
         if use_deepspeed and half and torch.cuda.is_available():
             import deepspeed
+            # Use provided dtype if available, otherwise default to torch.float16
+            deepspeed_dtype = dtype if dtype is not None else torch.float16
             self.ds_engine = deepspeed.init_inference(model=self.inference_model,
                                                       mp_size=1,
                                                       replace_with_kernel_inject=True,
-                                                      dtype=torch.float16)
+                                                      dtype=deepspeed_dtype)
             self.inference_model = self.ds_engine.module.eval()
         elif use_deepspeed and torch.cuda.is_available():
             import deepspeed
+            # Use provided dtype if available, otherwise default to torch.float32
+            deepspeed_dtype = dtype if dtype is not None else torch.float32
             self.ds_engine = deepspeed.init_inference(model=self.inference_model,
                                                       mp_size=1,
                                                       replace_with_kernel_inject=True,
-                                                      dtype=torch.float32)
+                                                      dtype=deepspeed_dtype)
             self.inference_model = self.ds_engine.module.eval()
         else:
             self.inference_model = self.inference_model.eval()

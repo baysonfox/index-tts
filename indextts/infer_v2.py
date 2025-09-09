@@ -35,7 +35,7 @@ import torch.nn.functional as F
 
 class IndexTTS2:
     def __init__(
-            self, cfg_path="checkpoints/config.yaml", model_dir="checkpoints", is_fp16=False, device=None,
+            self, cfg_path="checkpoints/config.yaml", model_dir="checkpoints", is_fp16=False, is_bf16=False, device=None,
             use_cuda_kernel=None,
     ):
         """
@@ -43,30 +43,40 @@ class IndexTTS2:
             cfg_path (str): path to the config file.
             model_dir (str): path to the model directory.
             is_fp16 (bool): whether to use fp16.
+            is_bf16 (bool): whether to use bf16 (takes precedence over fp16).
             device (str): device to use (e.g., 'cuda:0', 'cpu'). If None, it will be set automatically based on the availability of CUDA or MPS.
             use_cuda_kernel (None | bool): whether to use BigVGan custom fused activation CUDA kernel, only for CUDA device.
         """
         if device is not None:
             self.device = device
-            self.is_fp16 = False if device == "cpu" else is_fp16
+            self.is_bf16 = is_bf16 if device != "cpu" else False
+            self.is_fp16 = False if (device == "cpu" or self.is_bf16) else is_fp16
             self.use_cuda_kernel = use_cuda_kernel is not None and use_cuda_kernel and device.startswith("cuda")
         elif torch.cuda.is_available():
             self.device = "cuda:0"
-            self.is_fp16 = is_fp16
+            self.is_bf16 = is_bf16
+            self.is_fp16 = False if self.is_bf16 else is_fp16
             self.use_cuda_kernel = use_cuda_kernel is None or use_cuda_kernel
         elif hasattr(torch, "mps") and torch.backends.mps.is_available():
             self.device = "mps"
+            self.is_bf16 = False  # MPS does not support BF16
             self.is_fp16 = False  # Use float16 on MPS is overhead than float32
             self.use_cuda_kernel = False
         else:
             self.device = "cpu"
+            self.is_bf16 = False
             self.is_fp16 = False
             self.use_cuda_kernel = False
             print(">> Be patient, it may take a while to run in CPU mode.")
 
         self.cfg = OmegaConf.load(cfg_path)
         self.model_dir = model_dir
-        self.dtype = torch.float16 if self.is_fp16 else None
+        if self.is_bf16:
+            self.dtype = torch.bfloat16
+        elif self.is_fp16:
+            self.dtype = torch.float16
+        else:
+            self.dtype = None
         self.stop_mel_token = self.cfg.gpt.stop_mel_token
 
         self.qwen_emo = QwenEmotion(os.path.join(self.model_dir, self.cfg.qwen_emo_path))
@@ -75,12 +85,14 @@ class IndexTTS2:
         self.gpt_path = os.path.join(self.model_dir, self.cfg.gpt_checkpoint)
         load_checkpoint(self.gpt, self.gpt_path)
         self.gpt = self.gpt.to(self.device)
-        if self.is_fp16:
+        if self.is_bf16:
+            self.gpt.eval().to(torch.bfloat16)
+        elif self.is_fp16:
             self.gpt.eval().half()
         else:
             self.gpt.eval()
         print(">> GPT weights restored from:", self.gpt_path)
-        if self.is_fp16:
+        if self.is_bf16 or self.is_fp16:
             try:
                 import deepspeed
 
@@ -89,9 +101,9 @@ class IndexTTS2:
                 use_deepspeed = False
                 print(f">> DeepSpeed加载失败，回退到标准推理: {e}")
 
-            self.gpt.post_init_gpt2_config(use_deepspeed=use_deepspeed, kv_cache=True, half=True)
+            self.gpt.post_init_gpt2_config(use_deepspeed=use_deepspeed, kv_cache=True, half=True, dtype=self.dtype)
         else:
-            self.gpt.post_init_gpt2_config(use_deepspeed=True, kv_cache=True, half=False)
+            self.gpt.post_init_gpt2_config(use_deepspeed=True, kv_cache=True, half=False, dtype=self.dtype)
 
         if self.use_cuda_kernel:
             # preload the CUDA kernel for BigVGAN

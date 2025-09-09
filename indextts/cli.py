@@ -13,6 +13,7 @@ def main():
     parser.add_argument("-c", "--config", type=str, default="checkpoints/config.yaml", help="Path to the config file. Default is 'checkpoints/config.yaml'")
     parser.add_argument("--model_dir", type=str, default="checkpoints", help="Path to the model directory. Default is 'checkpoints'")
     parser.add_argument("--fp16", action="store_true", default=True, help="Use FP16 for inference if available")
+    parser.add_argument("--bf16", action="store_true", default=False, help="Use BF16 for inference if available (takes precedence over FP16)")
     parser.add_argument("-f", "--force", action="store_true", default=False, help="Force to overwrite the output file if it exists")
     parser.add_argument("-d", "--device", type=str, default=None, help="Device to run the model on (cpu, cuda, mps)." )
     args = parser.parse_args()
@@ -52,10 +53,11 @@ def main():
         else:
             args.device = "cpu"
             args.fp16 = False # Disable FP16 on CPU
+            args.bf16 = False # Disable BF16 on CPU
             print("WARNING: Running on CPU may be slow.")
 
     from indextts.infer import IndexTTS
-    tts = IndexTTS(cfg_path=args.config, model_dir=args.model_dir, is_fp16=args.fp16, device=args.device)
+    tts = IndexTTS(cfg_path=args.config, model_dir=args.model_dir, is_fp16=args.fp16, is_bf16=args.bf16, device=args.device)
     tts.infer(audio_prompt=args.voice, text=args.text.strip(), output_path=output_path)
 
 if __name__ == "__main__":

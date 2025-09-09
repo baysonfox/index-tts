@@ -23,6 +23,7 @@ parser.add_argument("--port", type=int, default=7860, help="Port to run the web 
 parser.add_argument("--host", type=str, default="0.0.0.0", help="Host to run the web UI on")
 parser.add_argument("--model_dir", type=str, default="checkpoints", help="Model checkpoints directory")
 parser.add_argument("--is_fp16", action="store_true", default=False, help="Fp16 infer")
+parser.add_argument("--is_bf16", action="store_true", default=False, help="Bf16 infer (takes precedence over FP16)")
 cmd_args = parser.parse_args()
 
 if not os.path.exists(cmd_args.model_dir):
@@ -49,7 +50,7 @@ from modelscope.hub import api
 
 i18n = I18nAuto(language="Auto")
 MODE = 'local'
-tts = IndexTTS2(model_dir=cmd_args.model_dir, cfg_path=os.path.join(cmd_args.model_dir, "config.yaml"),is_fp16=cmd_args.is_fp16)
+tts = IndexTTS2(model_dir=cmd_args.model_dir, cfg_path=os.path.join(cmd_args.model_dir, "config.yaml"),is_fp16=cmd_args.is_fp16, is_bf16=cmd_args.is_bf16)
 
 # 支持的语言列表
 LANGUAGES = {
