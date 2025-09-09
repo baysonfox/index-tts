@@ -73,6 +73,7 @@ class IndexTTS2:
         self.model_dir = model_dir
         if self.is_bf16:
             self.dtype = torch.bfloat16
+            print(f">> BF16 mode activated: dtype={self.dtype}")
         elif self.is_fp16:
             self.dtype = torch.float16
         else:
@@ -87,6 +88,7 @@ class IndexTTS2:
         self.gpt = self.gpt.to(self.device)
         if self.is_bf16:
             self.gpt.eval().to(torch.bfloat16)
+            print(f">> GPT model converted to BF16: {self.gpt.dtype}")
         elif self.is_fp16:
             self.gpt.eval().half()
         else:
@@ -102,6 +104,8 @@ class IndexTTS2:
                 print(f">> DeepSpeed加载失败，回退到标准推理: {e}")
 
             self.gpt.post_init_gpt2_config(use_deepspeed=use_deepspeed, kv_cache=True, half=True, dtype=self.dtype)
+            if self.is_bf16:
+                print(f">> DeepSpeed configured with BF16 dtype: {self.dtype}")
         else:
             self.gpt.post_init_gpt2_config(use_deepspeed=True, kv_cache=True, half=False, dtype=self.dtype)
 
