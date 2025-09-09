@@ -89,11 +89,30 @@ class IndexTTS:
         self.gpt = self.gpt.to(self.device)
         if self.is_bf16:
             self.gpt.eval().to(torch.bfloat16)
+            # 验证第一个参数的数据类型
+            for name, param in self.gpt.named_parameters():
+                print(f">> GPT model converted to BF16, first param '{name}' dtype: {param.dtype}")
+                break
         elif self.is_fp16:
             self.gpt.eval().half()
         else:
             self.gpt.eval()
         print(">> GPT weights restored from:", self.gpt_path)
+        # 验证BF16设置
+        if self.is_bf16:
+            print(f">> BF16 mode verification:")
+            bf16_params = 0
+            total_params = 0
+            for name, param in self.gpt.named_parameters():
+                total_params += 1
+                if param.dtype == torch.bfloat16:
+                    bf16_params += 1
+            print(f">> BF16 parameters: {bf16_params}/{total_params}")
+            if bf16_params == total_params:
+                print(">>> ✓ All parameters are BF16!")
+            else:
+                print(">>> ⚠ Some parameters are not BF16")
+        
         if self.is_bf16 or self.is_fp16:
             try:
                 import deepspeed
